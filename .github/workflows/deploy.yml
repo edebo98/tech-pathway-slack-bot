@@ -1,0 +1,50 @@
+name: Deploy Tech Pathway Slack Bot
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run tests
+        run: pytest tests/
+
+  notify:
+    name: Notify Slack
+    runs-on: ubuntu-latest
+    needs: test
+    if: always()
+    steps:
+      - name: Send Slack notification
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_CHANNEL: ${{ secrets.SLACK_NOTIFY_CHANNEL }}
+        run: |
+          STATUS="${{ needs.test.result }}"
+          if [ "$STATUS" = "success" ]; then
+            MESSAGE=" Deployment pipeline passed successfully on branch main."
+          else
+            MESSAGE=" Deployment pipeline failed on branch main. Please check the logs."
+          fi
+          curl -X POST "https://slack.com/api/chat.postMessage" \
+            -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"channel\": \"$SLACK_CHANNEL\", \"text\": \"$MESSAGE\"}"
