@@ -1,4 +1,4 @@
-from app.knowledge import find_answer
+from .knowledge import find_answer
 
 FALLBACK_MESSAGE = (
     "I don't have an answer for that in my knowledge base. "

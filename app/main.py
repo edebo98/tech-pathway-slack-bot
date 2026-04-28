@@ -1,11 +1,11 @@
 import os
-import re
+import json
 import logging
 from slack_bolt import App
 from slack_bolt.adapter.flask import SlackRequestHandler
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from dotenv import load_dotenv
-from app.bot import handle_message
+from .bot import handle_message
 
 load_dotenv()
 
@@ -23,11 +23,10 @@ handler = SlackRequestHandler(slack_app)
 
 @slack_app.event("app_mention")
 def handle_mention(body, say):
-    text = re.sub(r"<@\w+>", "", body["event"].get("text", "")).strip()
+    text = body["event"].get("text", "")
     user = body["event"].get("user", "there")
     logger.info(f"Received mention from user {user}: {text}")
     response = handle_message(text)
-    logger.info(f"Responding with: {response}")
     say(f"<@{user}> {response}")
 
 
@@ -36,16 +35,19 @@ def handle_direct_message(body, say):
     text = body["event"].get("text", "")
     user = body["event"].get("user", "there")
     channel_type = body["event"].get("channel_type", "")
-
     if channel_type == "im":
         logger.info(f"Received DM from user {user}: {text}")
         response = handle_message(text)
-        logger.info(f"Responding with: {response}")
         say(response)
 
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
+    if request.content_type == "application/json":
+        data = request.get_json()
+        if data and data.get("type") == "url_verification":
+            logger.info("Received Slack challenge verification")
+            return jsonify({"challenge": data["challenge"]})
     return handler.handle(request)
 
 
