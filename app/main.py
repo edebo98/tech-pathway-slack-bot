@@ -43,11 +43,15 @@ def handle_direct_message(body, say):
 
 @flask_app.route("/slack/events", methods=["POST"])
 def slack_events():
-    if request.content_type == "application/json":
-        data = request.get_json()
+    # Handle challenge before any signature verification
+    try:
+        data = request.get_json(force=True, silent=True)
         if data and data.get("type") == "url_verification":
-            logger.info("Received Slack challenge verification")
-            return jsonify({"challenge": data["challenge"]})
+            challenge = data.get("challenge")
+            logger.info(f"Responding to Slack challenge: {challenge}")
+            return challenge, 200, {"Content-Type": "text/plain"}
+    except Exception as e:
+        logger.error(f"Challenge error: {e}")
     return handler.handle(request)
 
 
