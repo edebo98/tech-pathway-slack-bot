@@ -77,6 +77,8 @@ resource "aws_instance" "bot_server" {
     aws_region   = var.aws_region
   })
 
+  subnet_id = "subnet-0781f0fa10499d9d4"
+
   tags = {
     Name = var.project_name
   }
