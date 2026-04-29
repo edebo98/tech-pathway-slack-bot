@@ -27,10 +27,38 @@ jobs:
       - name: Run tests
         run: pytest tests/
 
+  deploy:
+    name: Deploy to EC2 via SSM
+    runs-on: ubuntu-latest
+    needs: test
+    if: success()
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy via SSM
+        run: |
+          aws ssm send-command \
+            --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters commands='[
+              "cd /home/ec2-user",
+              "git clone https://github.com/pakurumo/edebo-ai.git app || git -C app pull",
+              "cd app",
+              "pip3 install -r requirements.txt",
+              "pkill -f gunicorn || true",
+              "nohup gunicorn -b 0.0.0.0:5000 app.app:app --daemon"
+            ]' \
+            --output text
+
   notify:
     name: Notify Slack
     runs-on: ubuntu-latest
-    needs: test
+    needs: [test, deploy]
     if: always()
     steps:
       - name: Send Slack notification
@@ -38,11 +66,12 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_CHANNEL: ${{ secrets.SLACK_NOTIFY_CHANNEL }}
         run: |
-          STATUS="${{ needs.test.result }}"
-          if [ "$STATUS" = "success" ]; then
-            MESSAGE=" Deployment pipeline passed successfully on branch main."
+          TEST="${{ needs.test.result }}"
+          DEPLOY="${{ needs.deploy.result }}"
+          if [ "$TEST" = "success" ] && [ "$DEPLOY" = "success" ]; then
+            MESSAGE="✅ Deployment succeeded. Tech Pathway bot is live on EC2."
           else
-            MESSAGE=" Deployment pipeline failed on branch main. Please check the logs."
+            MESSAGE="❌ Pipeline failed. Test: $TEST | Deploy: $DEPLOY. Check the logs."
           fi
           curl -X POST "https://slack.com/api/chat.postMessage" \
             -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
